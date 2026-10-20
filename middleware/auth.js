@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const mongoose = require('mongoose');
 const User = require('../models/User');
 
 const protect = async (req, res, next) => {
@@ -19,11 +20,20 @@ const protect = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'viewflow_jwt_secret_key');
-    const user = await User.findById(decoded.id).select('-password');
-    if (!user) {
-      return res.status(401).json({ error: 'User not found or token invalid' });
+    if (mongoose.connection.readyState === 1) {
+      const user = await User.findById(decoded.id).select('-password');
+      if (!user) {
+        return res.status(401).json({ error: 'User not found or token invalid' });
+      }
+      req.user = user;
+    } else {
+      req.user = {
+        _id: decoded.id,
+        name: 'Demo Agent',
+        email: 'agent@viewflow.demo',
+        role: 'agent'
+      };
     }
-    req.user = user;
     next();
   } catch (err) {
     return res.status(401).json({ error: 'Token verification failed: ' + err.message });

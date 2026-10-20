@@ -7,14 +7,14 @@ const Viewing = require('../models/Viewing');
 const Task = require('../models/Task');
 const ActivityLog = require('../models/ActivityLog');
 const store = require('../config/mockStore');
-const { optionalAuth } = require('../middleware/auth');
+const { protect } = require('../middleware/auth');
 
 const isDbConnected = () => mongoose.connection.readyState === 1;
 
-router.get('/', optionalAuth, async (req, res) => {
+router.get('/', protect, async (req, res) => {
   try {
     if (isDbConnected()) {
-      const userFilter = req.user ? { user: req.user._id } : {};
+      const userFilter = { user: req.user._id };
 
       const totalProperties = await Property.countDocuments(userFilter);
       const availableProperties = await Property.countDocuments({ ...userFilter, status: 'Available' });
@@ -106,19 +106,27 @@ router.get('/', optionalAuth, async (req, res) => {
 });
 
 // RESET DEMO DATA
-router.post('/reset-demo', async (req, res) => {
+router.post('/reset-demo', protect, async (req, res) => {
   try {
-    if (isDbConnected()) {
-      // Clear data
-      await Property.deleteMany({});
-      await Lead.deleteMany({});
-      await Viewing.deleteMany({});
-      await Task.deleteMany({});
-      await ActivityLog.deleteMany({});
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(403).json({ error: 'Demo reset is strictly disabled in production.' });
+    }
 
-      // Seed Properties
+    const userId = req.user._id;
+
+    if (isDbConnected()) {
+      // Clear ONLY current user's data
+      const filter = { user: userId };
+      await Property.deleteMany(filter);
+      await Lead.deleteMany(filter);
+      await Viewing.deleteMany(filter);
+      await Task.deleteMany(filter);
+      await ActivityLog.deleteMany(filter);
+
+      // Seed Properties for this user
       const createdProperties = await Property.insertMany([
         {
+          user: userId,
           title: 'Modern Waterfront Luxury Villa',
           description: 'Breathtaking 4-bedroom villa with panoramic bay views, private pool, and smart home automation.',
           price: 850000,
@@ -131,6 +139,7 @@ router.post('/reset-demo', async (req, res) => {
           featured: true
         },
         {
+          user: userId,
           title: 'Penthouse Apartment in Financial District',
           description: 'Exquisite 2-bed penthouse with 12ft floor-to-ceiling windows and direct skyline views.',
           price: 3600,
@@ -143,6 +152,7 @@ router.post('/reset-demo', async (req, res) => {
           featured: true
         },
         {
+          user: userId,
           title: 'Charming Suburban Family Home',
           description: 'Quiet neighborhood home featuring a spacious backyard, modern kitchen, and garage for 2 cars.',
           price: 495000,
@@ -156,9 +166,10 @@ router.post('/reset-demo', async (req, res) => {
         }
       ]);
 
-      // Seed Leads
+      // Seed Leads for this user
       const createdLeads = await Lead.insertMany([
         {
+          user: userId,
           name: 'Sarah Jenkins',
           email: 'sarah.j@example.com',
           phone: '+1 (555) 234-5678',
@@ -169,6 +180,7 @@ router.post('/reset-demo', async (req, res) => {
           notes: 'Pre-approved mortgage. Wants close to international schools.'
         },
         {
+          user: userId,
           name: 'Marcus Brody',
           email: 'm.brody@venturecap.com',
           phone: '+1 (555) 876-5432',
@@ -179,6 +191,7 @@ router.post('/reset-demo', async (req, res) => {
           notes: 'Needs immediate move-in by 1st of next month.'
         },
         {
+          user: userId,
           name: 'David & Emma Vance',
           email: 'vance.family@example.com',
           phone: '+1 (555) 345-6789',
@@ -192,6 +205,7 @@ router.post('/reset-demo', async (req, res) => {
 
       // Seed Viewings
       await Viewing.create({
+        user: userId,
         property: createdProperties[0]._id,
         lead: createdLeads[0]._id,
         scheduledDate: new Date(Date.now() + 24 * 60 * 60 * 1000),
@@ -202,22 +216,26 @@ router.post('/reset-demo', async (req, res) => {
       // Seed Tasks
       await Task.insertMany([
         {
+          user: userId,
           title: 'Send floor plan & HOA docs to Sarah Jenkins',
           dueDate: new Date(Date.now() + 12 * 60 * 60 * 1000),
           priority: 'High',
           status: 'Pending',
-          lead: createdLeads[0]._id
+          relatedLead: createdLeads[0]._id,
+          relatedProperty: createdProperties[0]._id
         },
         {
+          user: userId,
           title: 'Prepare counter-offer agreement for Marcus',
           dueDate: new Date(Date.now() + 24 * 60 * 60 * 1000),
           priority: 'Medium',
           status: 'Pending',
-          lead: createdLeads[1]._id
+          relatedLead: createdLeads[1]._id,
+          relatedProperty: createdProperties[1]._id
         }
       ]);
 
-      return res.json({ success: true, message: 'Demo data has been reset to factory state.' });
+      return res.json({ success: true, message: 'Demo data has been refreshed for your account.' });
     }
 
     res.json({ success: true, message: 'Demo reset (in-memory mode).' });

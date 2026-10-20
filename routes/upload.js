@@ -3,6 +3,7 @@ const router = express.Router();
 const multer = require('multer');
 const path = require('path');
 const cloudinary = require('cloudinary').v2;
+const { protect } = require('../middleware/auth');
 
 // Cloudinary Configuration
 cloudinary.config({
@@ -49,8 +50,8 @@ const uploadToCloudinary = (buffer) => {
   });
 };
 
-// POST /api/upload - Pure Cloudinary Image Upload
-router.post('/', upload.array('images', 8), async (req, res) => {
+// POST /api/upload - Pure Cloudinary Image Upload (Protected)
+router.post('/', protect, upload.array('images', 8), async (req, res) => {
   try {
     if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
       return res.status(500).json({

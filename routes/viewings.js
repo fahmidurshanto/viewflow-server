@@ -9,16 +9,12 @@ const { optionalAuth, protect } = require('../middleware/auth');
 
 const isDbConnected = () => mongoose.connection.readyState === 1;
 
-// GET viewings
-router.get('/', optionalAuth, async (req, res) => {
+// GET viewings (Protected - tenant isolated)
+router.get('/', protect, async (req, res) => {
   try {
     if (isDbConnected()) {
       const { status } = req.query;
-      let query = {};
-      if (req.user) {
-        // Strict multi-tenant isolation: Only user's own viewings
-        query.user = req.user._id;
-      }
+      let query = { user: req.user._id };
       if (status) query.status = status;
       const viewings = await Viewing.find(query)
         .populate('property')
@@ -26,7 +22,8 @@ router.get('/', optionalAuth, async (req, res) => {
         .sort({ scheduledDate: 1 });
       return res.json(viewings);
     }
-    res.json(store.viewings);
+    const filtered = store.viewings.filter(v => !v.user || String(v.user) === String(req.user._id));
+    res.json(filtered);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -43,7 +40,7 @@ router.get('/availability', async (req, res) => {
     const startOfDay = new Date(`${date}T00:00:00.000Z`);
     const endOfDay = new Date(`${date}T23:59:59.999Z`);
 
-    if (isDbConnected()) {
+    if (isDbConnected() && mongoose.isValidObjectId(propertyId)) {
       const bookedViewings = await Viewing.find({
         property: propertyId,
         status: { $in: ['Scheduled', 'Confirmed'] },
@@ -62,7 +59,35 @@ router.get('/availability', async (req, res) => {
         };
       });
 
-      return res.json({ propertyId, date, occupiedSlots });
+      const standardTimes = [
+        '09:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
+        '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM',
+        '05:00 PM', '06:00 PM'
+      ];
+
+      const slots = standardTimes.map((timeStr) => {
+        const [time, period] = timeStr.split(' ');
+        let [hours, minutes] = time.split(':').map(Number);
+        if (period === 'PM' && hours !== 12) hours += 12;
+        if (period === 'AM' && hours === 12) hours = 0;
+
+        const slotStart = new Date(`${date}T00:00:00.000Z`);
+        slotStart.setUTCHours(hours, minutes, 0, 0);
+        const slotEnd = new Date(slotStart.getTime() + 45 * 60000);
+
+        const isOccupied = occupiedSlots.some((occ) => {
+          const occStart = new Date(occ.start).getTime();
+          const occEnd = new Date(occ.end).getTime();
+          return slotStart.getTime() < occEnd && slotEnd.getTime() > occStart;
+        });
+
+        return {
+          time: timeStr,
+          available: !isOccupied
+        };
+      });
+
+      return res.json({ propertyId, date, occupiedSlots, slots });
     }
 
     // Mock fallback
@@ -84,14 +109,42 @@ router.get('/availability', async (req, res) => {
         };
       });
 
-    res.json({ propertyId, date, occupiedSlots });
+    const standardTimes = [
+      '09:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
+      '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM',
+      '05:00 PM', '06:00 PM'
+    ];
+
+    const slots = standardTimes.map((timeStr) => {
+      const [time, period] = timeStr.split(' ');
+      let [hours, minutes] = time.split(':').map(Number);
+      if (period === 'PM' && hours !== 12) hours += 12;
+      if (period === 'AM' && hours === 12) hours = 0;
+
+      const slotStart = new Date(`${date}T00:00:00.000Z`);
+      slotStart.setUTCHours(hours, minutes, 0, 0);
+      const slotEnd = new Date(slotStart.getTime() + 45 * 60000);
+
+      const isOccupied = occupiedSlots.some((occ) => {
+        const occStart = new Date(occ.start).getTime();
+        const occEnd = new Date(occ.end).getTime();
+        return slotStart.getTime() < occEnd && slotEnd.getTime() > occStart;
+      });
+
+      return {
+        time: timeStr,
+        available: !isOccupied
+      };
+    });
+
+    res.json({ propertyId, date, occupiedSlots, slots });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// CREATE viewing (with robust collision check)
-router.post('/', optionalAuth, async (req, res) => {
+// CREATE viewing (Protected - with collision check)
+router.post('/', protect, async (req, res) => {
   try {
     const { property, lead, scheduledDate, durationMinutes } = req.body;
     if (!property || !lead || !scheduledDate) {
@@ -131,11 +184,9 @@ router.post('/', optionalAuth, async (req, res) => {
         lead,
         scheduledDate: startTime,
         durationMinutes: duration,
-        status: 'Scheduled'
+        status: 'Scheduled',
+        user: req.user._id
       };
-      if (req.user) {
-        viewingData.user = req.user._id;
-      }
 
       const viewing = new Viewing(viewingData);
       const saved = await viewing.save();
@@ -192,16 +243,19 @@ router.post('/', optionalAuth, async (req, res) => {
   }
 });
 
-// UPDATE viewing status
-router.patch('/:id/status', async (req, res) => {
+// UPDATE viewing status (Protected - ownership verified)
+router.patch('/:id/status', protect, async (req, res) => {
   try {
     const { status, feedback } = req.body;
     if (isDbConnected()) {
-      const updated = await Viewing.findByIdAndUpdate(
-        req.params.id,
+      const updated = await Viewing.findOneAndUpdate(
+        { _id: req.params.id, user: req.user._id },
         { status, feedback },
         { new: true }
       ).populate('property lead');
+      if (!updated) {
+        return res.status(404).json({ error: 'Viewing not found or access denied' });
+      }
       return res.json(updated);
     }
 
@@ -230,7 +284,7 @@ router.post('/public-book', async (req, res) => {
     const duration = Number(durationMinutes) || 45;
     const endTime = new Date(startTime.getTime() + duration * 60000);
 
-    if (isDbConnected()) {
+    if (isDbConnected() && mongoose.isValidObjectId(propertyId)) {
       const Property = require('../models/Property');
       const propertyDoc = await Property.findById(propertyId);
       if (!propertyDoc) {
@@ -330,10 +384,12 @@ router.post('/public-book', async (req, res) => {
         }).catch(err => console.error('Booking confirmation WhatsApp error:', err));
       }
 
+      const populatedViewing = await Viewing.findById(savedViewing._id).populate('property lead');
+
       return res.status(201).json({
         success: true,
         message: 'Viewing appointment booked successfully!',
-        viewing: populated
+        viewing: populatedViewing || savedViewing
       });
     }
 

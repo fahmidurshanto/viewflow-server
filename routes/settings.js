@@ -1,19 +1,19 @@
 const express = require('express');
 const router = express.Router();
 const Settings = require('../models/Settings');
-const { optionalAuth } = require('../middleware/auth');
+const { protect } = require('../middleware/auth');
 const { sendEmail, sendWhatsApp } = require('../services/notificationService');
 
-// GET settings
-router.get('/', optionalAuth, async (req, res) => {
+// GET settings (Protected - tenant isolated)
+router.get('/', protect, async (req, res) => {
   try {
-    const userQuery = req.user ? { user: req.user._id } : {};
+    const userQuery = { user: req.user._id };
     let settings = await Settings.findOne(userQuery);
     if (!settings) {
       settings = await Settings.create({
-        user: req.user ? req.user._id : undefined,
-        agentEmail: req.user ? req.user.email : 'admin@viewflow.demo',
-        agencyName: req.user?.company || 'ViewFlow Premier Real Estate'
+        user: req.user._id,
+        agentEmail: req.user.email,
+        agencyName: req.user.agencyName || 'ViewFlow Premier Real Estate'
       });
     }
     res.json(settings);
@@ -22,15 +22,15 @@ router.get('/', optionalAuth, async (req, res) => {
   }
 });
 
-// UPDATE settings
-router.put('/', optionalAuth, async (req, res) => {
+// UPDATE settings (Protected - tenant isolated)
+router.put('/', protect, async (req, res) => {
   try {
-    const userQuery = req.user ? { user: req.user._id } : {};
+    const userQuery = { user: req.user._id };
     let settings = await Settings.findOne(userQuery);
     if (!settings) {
       settings = new Settings({
         ...req.body,
-        user: req.user ? req.user._id : undefined
+        user: req.user._id
       });
     } else {
       Object.assign(settings, req.body);
@@ -42,14 +42,14 @@ router.put('/', optionalAuth, async (req, res) => {
   }
 });
 
-// TEST EMAIL (Free Gmail SMTP)
-router.post('/test-email', optionalAuth, async (req, res) => {
+// TEST EMAIL (Free Gmail SMTP - Protected)
+router.post('/test-email', protect, async (req, res) => {
   try {
     const { toEmail } = req.body;
-    const userQuery = req.user ? { user: req.user._id } : {};
+    const userQuery = { user: req.user._id };
     const settings = await Settings.findOne(userQuery);
 
-    const recipient = toEmail || req.user?.email || settings?.agentEmail || 'test@example.com';
+    const recipient = toEmail || req.user.email || settings?.agentEmail;
     const result = await sendEmail({
       to: recipient,
       subject: `[Test] Free Email Notification from ${settings?.agencyName || 'ViewFlow'}`,
@@ -76,11 +76,11 @@ router.post('/test-email', optionalAuth, async (req, res) => {
   }
 });
 
-// TEST WHATSAPP
-router.post('/test-whatsapp', optionalAuth, async (req, res) => {
+// TEST WHATSAPP (Protected)
+router.post('/test-whatsapp', protect, async (req, res) => {
   try {
     const { toPhone } = req.body;
-    const userQuery = req.user ? { user: req.user._id } : {};
+    const userQuery = { user: req.user._id };
     const settings = await Settings.findOne(userQuery);
 
     const recipient = toPhone || settings?.agentPhone;
@@ -95,9 +95,13 @@ router.post('/test-whatsapp', optionalAuth, async (req, res) => {
   }
 });
 
-// RESET DEMO DATA
-router.post('/reset-demo', optionalAuth, async (req, res) => {
+// RESET DEMO DATA (Protected)
+router.post('/reset-demo', protect, async (req, res) => {
   try {
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(403).json({ error: 'Demo reset is strictly disabled in production.' });
+    }
+
     const mongoose = require('mongoose');
     const Property = require('../models/Property');
     const Lead = require('../models/Lead');
@@ -105,11 +109,11 @@ router.post('/reset-demo', optionalAuth, async (req, res) => {
     const Task = require('../models/Task');
     const ActivityLog = require('../models/ActivityLog');
 
-    const userId = req.user ? req.user._id : null;
-    const filter = userId ? { user: userId } : {};
+    const userId = req.user._id;
+    const filter = { user: userId };
 
     if (mongoose.connection.readyState === 1) {
-      // Clear current tenant's data or all demo data if unauthenticated
+      // Clear ONLY current tenant's data
       await Property.deleteMany(filter);
       await Lead.deleteMany(filter);
       await Viewing.deleteMany(filter);

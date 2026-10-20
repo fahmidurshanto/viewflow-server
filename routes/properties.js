@@ -50,10 +50,9 @@ router.get('/', optionalAuth, async (req, res) => {
 // GET single property
 router.get('/:id', async (req, res) => {
   try {
-    if (isDbConnected()) {
+    if (isDbConnected() && mongoose.isValidObjectId(req.params.id)) {
       const property = await Property.findById(req.params.id).populate('user', 'name email phone agencyName');
-      if (!property) return res.status(404).json({ error: 'Property not found' });
-      return res.json(property);
+      if (property) return res.json(property);
     }
     const prop = store.properties.find((p) => p._id === req.params.id);
     if (!prop) return res.status(404).json({ error: 'Property not found' });
@@ -63,14 +62,14 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// CREATE property
-router.post('/', optionalAuth, async (req, res) => {
+// CREATE property (Protected)
+router.post('/', protect, async (req, res) => {
   try {
     if (isDbConnected()) {
-      const propData = { ...req.body };
-      if (req.user) {
-        propData.user = req.user._id;
-      }
+      const propData = {
+        ...req.body,
+        user: req.user._id
+      };
       const property = new Property(propData);
       const saved = await property.save();
       return res.status(201).json(saved);
@@ -78,7 +77,7 @@ router.post('/', optionalAuth, async (req, res) => {
     const newProp = {
       _id: `prop-${Date.now()}`,
       ...req.body,
-      user: req.user ? req.user._id : null,
+      user: req.user._id,
       createdAt: new Date().toISOString()
     };
     store.properties.unshift(newProp);
@@ -88,11 +87,18 @@ router.post('/', optionalAuth, async (req, res) => {
   }
 });
 
-// UPDATE property
-router.put('/:id', async (req, res) => {
+// UPDATE property (Protected - ownership verified)
+router.put('/:id', protect, async (req, res) => {
   try {
     if (isDbConnected()) {
-      const updated = await Property.findByIdAndUpdate(req.params.id, req.body, { new: true });
+      const updated = await Property.findOneAndUpdate(
+        { _id: req.params.id, user: req.user._id },
+        req.body,
+        { new: true }
+      );
+      if (!updated) {
+        return res.status(404).json({ error: 'Property not found or access denied' });
+      }
       return res.json(updated);
     }
     const idx = store.properties.findIndex((p) => p._id === req.params.id);
@@ -106,11 +112,14 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// DELETE property
-router.delete('/:id', async (req, res) => {
+// DELETE property (Protected - ownership verified)
+router.delete('/:id', protect, async (req, res) => {
   try {
     if (isDbConnected()) {
-      await Property.findByIdAndDelete(req.params.id);
+      const deleted = await Property.findOneAndDelete({ _id: req.params.id, user: req.user._id });
+      if (!deleted) {
+        return res.status(404).json({ error: 'Property not found or access denied' });
+      }
       return res.json({ message: 'Property deleted successfully' });
     }
     store.properties = store.properties.filter((p) => p._id !== req.params.id);
