@@ -2,6 +2,11 @@ const mongoose = require('mongoose');
 
 const PropertySchema = new mongoose.Schema(
   {
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      index: true
+    },
     title: { type: String, required: true, trim: true },
     description: { type: String, default: '' },
     price: { type: Number, required: true },

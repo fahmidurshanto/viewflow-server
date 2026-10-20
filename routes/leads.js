@@ -4,15 +4,20 @@ const mongoose = require('mongoose');
 const Lead = require('../models/Lead');
 const ActivityLog = require('../models/ActivityLog');
 const store = require('../config/mockStore');
+const { optionalAuth, protect } = require('../middleware/auth');
 
 const isDbConnected = () => mongoose.connection.readyState === 1;
 
 // GET all leads
-router.get('/', async (req, res) => {
+router.get('/', optionalAuth, async (req, res) => {
   try {
     if (isDbConnected()) {
       const { stage, search } = req.query;
       let query = {};
+      if (req.user) {
+        // Strict multi-tenant isolation: Only user's own leads
+        query.user = req.user._id;
+      }
       if (stage) query.stage = stage;
       if (search) {
         query.$or = [
@@ -62,10 +67,14 @@ router.get('/:id', async (req, res) => {
 });
 
 // CREATE lead
-router.post('/', async (req, res) => {
+router.post('/', optionalAuth, async (req, res) => {
   try {
     if (isDbConnected()) {
-      const lead = new Lead(req.body);
+      const leadData = { ...req.body };
+      if (req.user) {
+        leadData.user = req.user._id;
+      }
+      const lead = new Lead(leadData);
       const saved = await lead.save();
       await ActivityLog.create({
         lead: saved._id,

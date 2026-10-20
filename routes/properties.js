@@ -3,15 +3,20 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const Property = require('../models/Property');
 const store = require('../config/mockStore');
+const { optionalAuth, protect } = require('../middleware/auth');
 
 const isDbConnected = () => mongoose.connection.readyState === 1;
 
 // GET all properties
-router.get('/', async (req, res) => {
+router.get('/', optionalAuth, async (req, res) => {
   try {
     if (isDbConnected()) {
       const { status, type, search } = req.query;
       let query = {};
+      if (req.user) {
+        // Strict multi-tenant isolation: Only user's own properties
+        query.user = req.user._id;
+      }
       if (status) query.status = status;
       if (type) query.type = type;
       if (search) {
@@ -46,7 +51,7 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     if (isDbConnected()) {
-      const property = await Property.findById(req.params.id);
+      const property = await Property.findById(req.params.id).populate('user', 'name email phone agencyName');
       if (!property) return res.status(404).json({ error: 'Property not found' });
       return res.json(property);
     }
@@ -59,16 +64,21 @@ router.get('/:id', async (req, res) => {
 });
 
 // CREATE property
-router.post('/', async (req, res) => {
+router.post('/', optionalAuth, async (req, res) => {
   try {
     if (isDbConnected()) {
-      const property = new Property(req.body);
+      const propData = { ...req.body };
+      if (req.user) {
+        propData.user = req.user._id;
+      }
+      const property = new Property(propData);
       const saved = await property.save();
       return res.status(201).json(saved);
     }
     const newProp = {
       _id: `prop-${Date.now()}`,
       ...req.body,
+      user: req.user ? req.user._id : null,
       createdAt: new Date().toISOString()
     };
     store.properties.unshift(newProp);

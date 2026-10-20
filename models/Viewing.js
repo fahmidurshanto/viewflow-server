@@ -2,6 +2,11 @@ const mongoose = require('mongoose');
 
 const ViewingSchema = new mongoose.Schema(
   {
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      index: true
+    },
     property: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Property',

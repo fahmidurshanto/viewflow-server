@@ -3,14 +3,18 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const Task = require('../models/Task');
 const store = require('../config/mockStore');
+const { optionalAuth } = require('../middleware/auth');
 
 const isDbConnected = () => mongoose.connection.readyState === 1;
 
-router.get('/', async (req, res) => {
+router.get('/', optionalAuth, async (req, res) => {
   try {
     if (isDbConnected()) {
       const { status } = req.query;
       let query = {};
+      if (req.user) {
+        query.user = req.user._id;
+      }
       if (status) query.status = status;
       const tasks = await Task.find(query)
         .populate('relatedLead')

@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const cookieParser = require('cookie-parser');
 const dotenv = require('dotenv');
 const connectDB = require('./config/db');
 const initReminderScheduler = require('./services/scheduler');
@@ -9,8 +10,12 @@ dotenv.config();
 const app = express();
 
 // Middlewares
-app.use(cors());
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  credentials: true
+}));
 app.use(express.json());
+app.use(cookieParser());
 
 // Database connection
 connectDB();
@@ -27,12 +32,17 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Pure Cloud Uploads active (No local disk serving)
+
 // App Routes
+app.use('/api/upload', require('./routes/upload'));
+app.use('/api/auth', require('./routes/auth'));
 app.use('/api/properties', require('./routes/properties'));
 app.use('/api/leads', require('./routes/leads'));
 app.use('/api/viewings', require('./routes/viewings'));
 app.use('/api/tasks', require('./routes/tasks'));
 app.use('/api/analytics', require('./routes/analytics'));
+app.use('/api/settings', require('./routes/settings'));
 
 const PORT = process.env.PORT || 5000;
 
