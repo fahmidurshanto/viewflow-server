@@ -123,7 +123,10 @@ router.patch('/:id/stage', protect, async (req, res) => {
         lead: oldLead._id,
         user: req.user._id,
         type: 'Stage Changed',
-        note: `Pipeline stage moved from "${previousStage}" to "${stage}"`
+        title: 'Pipeline Stage Updated',
+        note: `Deal moved from "${previousStage}" to "${stage}" for ${oldLead.name}`,
+        author: req.user.name || 'Agent',
+        isRead: false
       });
       return res.json(oldLead);
     }
@@ -137,8 +140,10 @@ router.patch('/:id/stage', protect, async (req, res) => {
       _id: `act-${Date.now()}`,
       lead: lead._id,
       type: 'Stage Changed',
-      note: `Pipeline stage moved from "${prev}" to "${stage}"`,
+      title: 'Pipeline Stage Updated',
+      note: `Deal moved from "${prev}" to "${stage}" for ${lead.name}`,
       author: req.user.name || 'Agent',
+      isRead: false,
       createdAt: new Date().toISOString()
     });
     res.json(lead);
