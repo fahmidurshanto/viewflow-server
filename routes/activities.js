@@ -18,15 +18,10 @@ router.get('/', protect, async (req, res) => {
     const unreadOnly = req.query.unreadOnly === 'true';
 
     if (isDbConnected()) {
-      const query = {
-        $or: [
-          { user: req.user._id },
-          { user: { $exists: false } }
-        ]
-      };
+      const query = { user: req.user._id };
 
       if (unreadOnly) {
-        query.isRead = false;
+        query.isRead = { $ne: true };
       }
 
       const activities = await ActivityLog.find(query)
@@ -37,8 +32,8 @@ router.get('/', protect, async (req, res) => {
         .limit(limit);
 
       const unreadCount = await ActivityLog.countDocuments({
-        $or: [{ user: req.user._id }, { user: { $exists: false } }],
-        isRead: false
+        user: req.user._id,
+        isRead: { $ne: true }
       });
 
       return res.json({ activities, unreadCount });
@@ -73,9 +68,7 @@ router.put('/mark-read', protect, async (req, res) => {
     const { activityIds } = req.body;
 
     if (isDbConnected()) {
-      const filter = {
-        $or: [{ user: req.user._id }, { user: { $exists: false } }]
-      };
+      const filter = { user: req.user._id };
 
       if (Array.isArray(activityIds) && activityIds.length > 0) {
         filter._id = { $in: activityIds };
