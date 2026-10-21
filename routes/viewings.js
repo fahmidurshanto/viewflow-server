@@ -256,19 +256,49 @@ router.post('/', protect, async (req, res) => {
   }
 });
 
-// UPDATE viewing status (Protected - ownership verified)
+// UPDATE viewing status & feedback (Protected - ownership verified)
 router.patch('/:id/status', protect, async (req, res) => {
   try {
-    const { status, feedback } = req.body;
+    const { status, feedback, autoAdvanceLead } = req.body;
     if (isDbConnected()) {
+      const updateData = {};
+      if (status) updateData.status = status;
+      if (feedback) updateData.feedback = feedback;
+
       const updated = await Viewing.findOneAndUpdate(
         { _id: req.params.id, user: req.user._id },
-        { status, feedback },
+        updateData,
         { new: true }
       ).populate('property lead');
+
       if (!updated) {
         return res.status(404).json({ error: 'Viewing not found or access denied' });
       }
+
+      // If client feedback indicates offer interest or requested auto-advance, update Lead stage
+      if (updated.lead && (feedback?.interestedInOffer || autoAdvanceLead)) {
+        const Lead = require('../models/Lead');
+        await Lead.findByIdAndUpdate(updated.lead._id, {
+          stage: 'Offer',
+          notes: feedback?.comments ? `Offer interest recorded after viewing: ${feedback.comments}` : undefined
+        });
+      }
+
+      // Log Activity
+      await ActivityLog.create({
+        user: req.user._id,
+        lead: updated.lead?._id,
+        property: updated.property?._id,
+        viewing: updated._id,
+        type: status === 'Completed' ? 'Viewing Completed' : 'Viewing Note',
+        title: status === 'Completed' ? 'Viewing Completed & Feedback Logged' : `Viewing Status: ${status}`,
+        note: feedback?.comments 
+          ? `Status marked as "${status}". Rating: ${feedback.rating || 'N/A'}★. Feedback: "${feedback.comments}". Interested in offer: ${feedback.interestedInOffer ? 'Yes' : 'No'}`
+          : `Viewing status updated to "${status}"`,
+        author: req.user.name || 'Agent',
+        isRead: false
+      });
+
       return res.json(updated);
     }
 
