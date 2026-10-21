@@ -400,31 +400,53 @@ router.post('/public-book', async (req, res) => {
       // Dispatch instant booking confirmation email & WhatsApp
       const Settings = require('../models/Settings');
       const { sendEmail, sendWhatsApp } = require('../services/notificationService');
+      const { renderTemplate } = require('../utils/templateEngine');
       const settings = await Settings.findOne(propertyDoc.user ? { user: propertyDoc.user } : {});
 
       const formattedDate = startTime.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
       const formattedTime = startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const durationStr = `${duration} mins`;
+      const locationStr = propertyDoc.address
+        ? `${propertyDoc.address.street || ''}${propertyDoc.address.city ? ', ' + propertyDoc.address.city : ''}`.trim() || 'Property Location'
+        : 'Property Location';
+
+      const templateVars = {
+        clientName: name,
+        propertyTitle: propertyDoc.title,
+        viewingDate: formattedDate,
+        viewingTime: formattedTime,
+        duration: durationStr,
+        location: locationStr,
+        agencyName: settings?.agencyName || 'ViewFlow Premier Real Estate',
+        agentEmail: settings?.agentEmail || '',
+        agentPhone: settings?.agentPhone || '',
+        emailSignature: settings?.emailSignature || `Best regards,\n${settings?.agencyName || 'ViewFlow Premier Real Estate'}`
+      };
 
       // Send confirmation email
       sendEmail({
         to: email,
         subject: `Viewing Confirmed: ${propertyDoc.title}`,
         html: `
-          <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 16px;">
-            <h2 style="color: #2563eb; margin-top: 0;">Viewing Appointment Confirmed!</h2>
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 28px; border: 1px solid #e2e8f0; border-radius: 16px; background-color: #ffffff;">
+            <div style="margin-bottom: 20px;">
+              <span style="display: inline-block; padding: 4px 10px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; border-radius: 20px; background-color: #ecfdf5; color: #059669;">Booking Confirmed</span>
+            </div>
+            <h2 style="color: #0f172a; margin-top: 0; font-size: 20px;">Viewing Appointment Confirmed!</h2>
             <p style="color: #334155; font-size: 15px; line-height: 1.6;">
-              Hi ${name}, your viewing request for <strong>${propertyDoc.title}</strong> has been successfully booked in our calendar.
+              Hi ${name}, your private viewing appointment for <strong>${propertyDoc.title}</strong> has been successfully confirmed.
             </p>
-            <div style="background-color: #f8fafc; padding: 16px; border-radius: 12px; margin: 20px 0; border-left: 4px solid #2563eb;">
+            <div style="background-color: #f8fafc; padding: 18px; border-radius: 12px; margin: 20px 0; border-left: 4px solid #2563eb;">
+              <p style="margin: 4px 0; color: #0f172a;"><strong>Property:</strong> ${propertyDoc.title}</p>
               <p style="margin: 4px 0; color: #0f172a;"><strong>Date:</strong> ${formattedDate}</p>
-              <p style="margin: 4px 0; color: #0f172a;"><strong>Time:</strong> ${formattedTime} (${duration} mins)</p>
-              <p style="margin: 4px 0; color: #0f172a;"><strong>Location:</strong> ${propertyDoc.address?.street || ''}, ${propertyDoc.address?.city || ''}</p>
+              <p style="margin: 4px 0; color: #0f172a;"><strong>Time:</strong> ${formattedTime} (${durationStr})</p>
+              <p style="margin: 4px 0; color: #0f172a;"><strong>Location:</strong> ${locationStr}</p>
             </div>
             <p style="color: #64748b; font-size: 13px;">
-              Our agent will be on-site to greet you. If you need any assistance, feel free to reply directly to this email.
+              Our agent will be on-site to greet you. If you need any assistance or need to reschedule, feel free to reply directly to this email.
             </p>
             <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
-            <p style="color: #94a3b8; font-size: 11px; margin-bottom: 0;">
+            <p style="color: #94a3b8; font-size: 12px; margin-bottom: 0;">
               ${settings?.agencyName || 'ViewFlow Premier Real Estate'} • Booking Reference: #${viewing._id.toString().slice(-6)}
             </p>
           </div>
@@ -436,7 +458,7 @@ router.post('/public-book', async (req, res) => {
       if (phone) {
         sendWhatsApp({
           to: phone,
-          message: `Hi ${name}! Your viewing for ${propertyDoc.title} is confirmed for ${formattedDate} at ${formattedTime}. - ${settings?.agencyName || 'ViewFlow'}`,
+          message: `Hi ${name}! Your viewing for ${propertyDoc.title} is confirmed for ${formattedDate} at ${formattedTime}. Location: ${locationStr}. - ${settings?.agencyName || 'ViewFlow'}`,
           settings
         }).catch(err => console.error('Booking confirmation WhatsApp error:', err));
       }

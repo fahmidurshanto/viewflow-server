@@ -43,6 +43,19 @@ const SettingsSchema = new mongoose.Schema(
     autoPromoteLeadOnBooking: {
       type: Boolean,
       default: true
+    },
+    // Custom Reminder Templates with Placeholders
+    emailReminderSubject: {
+      type: String,
+      default: 'Reminder: Upcoming Viewing for {propertyTitle} at {viewingTime}'
+    },
+    emailReminderBody: {
+      type: String,
+      default: ''
+    },
+    whatsappReminderBody: {
+      type: String,
+      default: ''
     }
   },
   { timestamps: true }

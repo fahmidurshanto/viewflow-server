@@ -50,21 +50,49 @@ router.post('/test-email', protect, async (req, res) => {
     const settings = await Settings.findOne(userQuery);
 
     const recipient = toEmail || req.user.email || settings?.agentEmail;
+    const { renderTemplate, DEFAULT_EMAIL_SUBJECT, DEFAULT_EMAIL_BODY } = require('../utils/templateEngine');
+
+    const sampleVars = {
+      clientName: req.user.name || 'Sarah Jenkins (Test Client)',
+      propertyTitle: 'Modern Waterfront Luxury Villa',
+      viewingDate: new Date(Date.now() + 86400000).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }),
+      viewingTime: '02:00 PM',
+      duration: '45 mins',
+      location: '124 Marina Boulevard, Miami, FL',
+      agencyName: settings?.agencyName || 'ViewFlow Premier Real Estate',
+      agentEmail: settings?.agentEmail || req.user.email || 'agent@viewflow.demo',
+      agentPhone: settings?.agentPhone || '+1 (555) 019-2834',
+      emailSignature: settings?.emailSignature || `Best regards,\n${settings?.agencyName || 'ViewFlow Concierge Team'}`
+    };
+
+    const rawSubject = settings?.emailReminderSubject?.trim() || DEFAULT_EMAIL_SUBJECT;
+    const rawBody = settings?.emailReminderBody?.trim() || DEFAULT_EMAIL_BODY;
+
+    const renderedSubject = `[Test] ${renderTemplate(rawSubject, sampleVars)}`;
+    const renderedBody = renderTemplate(rawBody, sampleVars);
+    const formattedHtmlBody = renderedBody
+      .split('\n\n')
+      .map(para => `<p style="margin: 0 0 14px 0; line-height: 1.6; color: #334155;">${para.replace(/\n/g, '<br/>')}</p>`)
+      .join('');
+
     const result = await sendEmail({
       to: recipient,
-      subject: `[Test] Free Email Notification from ${settings?.agencyName || 'ViewFlow'}`,
+      subject: renderedSubject,
       html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 28px; border: 1px solid #e2e8f0; border-radius: 16px;">
-          <h2 style="color: #2563eb; margin-top: 0;">ViewFlow Free Email Delivery Verified</h2>
-          <p style="color: #334155; font-size: 15px; line-height: 1.6;">
-            Success! Your free email notification system via Gmail SMTP is connected and active.
-          </p>
-          <div style="background-color: #f8fafc; padding: 18px; border-radius: 12px; border-left: 4px solid #2563eb; margin: 20px 0;">
-            <p style="margin: 4px 0; color: #0f172a;"><strong>Agency:</strong> ${settings?.agencyName || 'ViewFlow Premier Real Estate'}</p>
-            <p style="margin: 4px 0; color: #0f172a;"><strong>Time:</strong> ${new Date().toLocaleString()}</p>
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 28px; border: 1px solid #e2e8f0; border-radius: 16px; background-color: #ffffff;">
+          <div style="margin-bottom: 20px;">
+            <span style="display: inline-block; padding: 4px 10px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; border-radius: 20px; background-color: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0;">Test Email Delivery</span>
           </div>
-          <p style="color: #64748b; font-size: 13px; white-space: pre-line;">
-            ${settings?.emailSignature || 'Best regards,\nViewFlow Concierge Team'}
+          <div style="font-size: 15px; color: #334155;">
+            ${formattedHtmlBody}
+          </div>
+          <div style="background-color: #f8fafc; padding: 18px; border-radius: 12px; border-left: 4px solid #2563eb; margin: 20px 0;">
+            <p style="margin: 4px 0; color: #0f172a;"><strong>Property:</strong> ${sampleVars.propertyTitle}</p>
+            <p style="margin: 4px 0; color: #0f172a;"><strong>Date & Time:</strong> ${sampleVars.viewingDate} at ${sampleVars.viewingTime} (${sampleVars.duration})</p>
+            <p style="margin: 4px 0; color: #0f172a;"><strong>Location:</strong> ${sampleVars.location}</p>
+          </div>
+          <p style="color: #64748b; font-size: 12px; margin-top: 16px;">
+            This is a test notification demonstrating your customized email template.
           </p>
         </div>
       `,
@@ -84,9 +112,27 @@ router.post('/test-whatsapp', protect, async (req, res) => {
     const settings = await Settings.findOne(userQuery);
 
     const recipient = toPhone || settings?.agentPhone;
+    const { renderTemplate, DEFAULT_WHATSAPP_BODY } = require('../utils/templateEngine');
+
+    const sampleVars = {
+      clientName: req.user.name || 'Sarah Jenkins',
+      propertyTitle: 'Modern Waterfront Luxury Villa',
+      viewingDate: new Date(Date.now() + 86400000).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }),
+      viewingTime: '02:00 PM',
+      duration: '45 mins',
+      location: '124 Marina Boulevard, Miami, FL',
+      agencyName: settings?.agencyName || 'ViewFlow Premier Real Estate',
+      agentEmail: settings?.agentEmail || req.user.email || 'agent@viewflow.demo',
+      agentPhone: settings?.agentPhone || '+1 (555) 019-2834',
+      emailSignature: settings?.emailSignature || `Best regards,\n${settings?.agencyName || 'ViewFlow Concierge Team'}`
+    };
+
+    const rawWaTemplate = settings?.whatsappReminderBody?.trim() || DEFAULT_WHATSAPP_BODY;
+    const renderedMsg = renderTemplate(rawWaTemplate, sampleVars);
+
     const result = await sendWhatsApp({
       to: recipient,
-      message: `🔔 [ViewFlow Alert] WhatsApp integration is active for ${settings?.agencyName || 'your agency'}! Viewing appointments will trigger instant mobile alerts.`,
+      message: `🔔 [Test Alert] ${renderedMsg}`,
       settings
     });
     res.json(result);
