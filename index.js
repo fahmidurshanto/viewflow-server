@@ -105,6 +105,7 @@ app.use('/api/viewings', require('./routes/viewings'));
 app.use('/api/tasks', require('./routes/tasks'));
 app.use('/api/analytics', require('./routes/analytics'));
 app.use('/api/settings', require('./routes/settings'));
+app.use('/api/activities', require('./routes/activities'));
 
 const PORT = process.env.PORT || 5000;
 

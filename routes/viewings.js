@@ -197,6 +197,19 @@ router.post('/', protect, async (req, res) => {
         await targetLead.save();
       }
 
+      // Log activity
+      await ActivityLog.create({
+        user: req.user._id,
+        lead: saved.lead,
+        property: saved.property,
+        viewing: saved._id,
+        type: 'Viewing Booked',
+        title: 'New Viewing Scheduled',
+        note: `Viewing scheduled for ${new Date(saved.scheduledDate).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}`,
+        author: req.user.name || 'Agent',
+        isRead: false
+      });
+
       return res.status(201).json(saved);
     }
 
@@ -340,6 +353,20 @@ router.post('/public-book', async (req, res) => {
         user: propertyDoc.user || null
       });
       const savedViewing = await viewing.save();
+
+      // Log activity notification for agent
+      await ActivityLog.create({
+        user: propertyDoc.user || null,
+        lead: leadDoc._id,
+        property: propertyDoc._id,
+        viewing: savedViewing._id,
+        type: 'Viewing Booked',
+        title: 'New Client Self-Booking',
+        note: `${name} self-booked a viewing for "${propertyDoc.title}" on ${startTime.toLocaleDateString([], { month: 'short', day: 'numeric' })} at ${startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+        author: name,
+        isRead: false
+      });
+
       // Dispatch instant booking confirmation email & WhatsApp
       const Settings = require('../models/Settings');
       const { sendEmail, sendWhatsApp } = require('../services/notificationService');
