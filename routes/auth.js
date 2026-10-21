@@ -34,7 +34,12 @@ const sendTokenResponse = (user, statusCode, res) => {
         email: user.email,
         agencyName: user.agencyName,
         phone: user.phone,
-        role: user.role
+        role: user.role,
+        subscriptionPlan: user.subscriptionPlan || 'Growth',
+        subscriptionBillingCycle: user.subscriptionBillingCycle || 'monthly',
+        subscriptionStatus: user.subscriptionStatus || 'trial',
+        trialStartedAt: user.trialStartedAt,
+        trialEndsAt: user.trialEndsAt
       }
     });
 };
@@ -118,6 +123,51 @@ router.get('/me', protect, async (req, res) => {
   res.json({
     user: req.user
   });
+});
+
+// UPDATE SUBSCRIPTION PLAN (/api/auth/subscription)
+router.put('/subscription', protect, async (req, res) => {
+  try {
+    const { plan, billingCycle } = req.body;
+    const validPlans = ['Starter', 'Growth', 'Enterprise'];
+    const validCycles = ['monthly', 'yearly'];
+
+    if (plan && !validPlans.includes(plan)) {
+      return res.status(400).json({ error: 'Invalid subscription plan' });
+    }
+    if (billingCycle && !validCycles.includes(billingCycle)) {
+      return res.status(400).json({ error: 'Invalid billing cycle' });
+    }
+
+    const user = await User.findById(req.user._id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    if (plan) user.subscriptionPlan = plan;
+    if (billingCycle) user.subscriptionBillingCycle = billingCycle;
+    user.subscriptionStatus = 'active';
+
+    await user.save();
+
+    res.json({
+      success: true,
+      message: `Subscription successfully updated to ${user.subscriptionPlan} (${user.subscriptionBillingCycle})!`,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        agencyName: user.agencyName,
+        phone: user.phone,
+        role: user.role,
+        subscriptionPlan: user.subscriptionPlan,
+        subscriptionBillingCycle: user.subscriptionBillingCycle,
+        subscriptionStatus: user.subscriptionStatus,
+        trialStartedAt: user.trialStartedAt,
+        trialEndsAt: user.trialEndsAt
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 module.exports = router;

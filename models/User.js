@@ -34,6 +34,30 @@ const UserSchema = new mongoose.Schema(
     avatar: {
       type: String,
       default: ''
+    },
+    // Subscription & Billing details
+    subscriptionPlan: {
+      type: String,
+      enum: ['Starter', 'Growth', 'Enterprise'],
+      default: 'Growth'
+    },
+    subscriptionBillingCycle: {
+      type: String,
+      enum: ['monthly', 'yearly'],
+      default: 'monthly'
+    },
+    subscriptionStatus: {
+      type: String,
+      enum: ['active', 'trial', 'expired', 'past_due'],
+      default: 'trial'
+    },
+    trialStartedAt: {
+      type: Date,
+      default: Date.now
+    },
+    trialEndsAt: {
+      type: Date,
+      default: () => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 1 Month (30 Days) free trial
     }
   },
   { timestamps: true }

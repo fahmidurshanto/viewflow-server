@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 const Property = require('../models/Property');
 const store = require('../config/mockStore');
 const { optionalAuth, protect } = require('../middleware/auth');
+const { checkPropertyLimit } = require('../middleware/planAccess');
 
 const isDbConnected = () => mongoose.connection.readyState === 1;
 
@@ -62,8 +63,8 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// CREATE property (Protected)
-router.post('/', protect, async (req, res) => {
+// CREATE property (Protected with Plan Limit Check)
+router.post('/', protect, checkPropertyLimit, async (req, res) => {
   try {
     if (isDbConnected()) {
       const propData = {

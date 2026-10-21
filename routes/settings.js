@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Settings = require('../models/Settings');
 const { protect } = require('../middleware/auth');
+const { requireFeature } = require('../middleware/planAccess');
 const { sendEmail, sendWhatsApp } = require('../services/notificationService');
 
 // GET settings (Protected - tenant isolated)
@@ -104,8 +105,8 @@ router.post('/test-email', protect, async (req, res) => {
   }
 });
 
-// TEST WHATSAPP (Protected)
-router.post('/test-whatsapp', protect, async (req, res) => {
+// TEST WHATSAPP (Protected - Gated for Growth/Enterprise)
+router.post('/test-whatsapp', protect, requireFeature('allowWhatsApp', 'Growth'), async (req, res) => {
   try {
     const { toPhone } = req.body;
     const userQuery = { user: req.user._id };
