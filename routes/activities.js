@@ -4,8 +4,6 @@ const mongoose = require('mongoose');
 const ActivityLog = require('../models/ActivityLog');
 const { protect } = require('../middleware/auth');
 
-const isDbConnected = () => mongoose.connection.readyState === 1;
-
 /**
  * GET /api/activities
  * Query parameters:
@@ -17,43 +15,25 @@ router.get('/', protect, async (req, res) => {
     const limit = Math.min(parseInt(req.query.limit, 10) || 20, 100);
     const unreadOnly = req.query.unreadOnly === 'true';
 
-    if (isDbConnected()) {
-      const query = { user: req.user._id };
+    const query = { user: req.user._id };
 
-      if (unreadOnly) {
-        query.isRead = { $ne: true };
-      }
-
-      const activities = await ActivityLog.find(query)
-        .populate('lead', 'name email phone stage')
-        .populate('property', 'title address price')
-        .populate('viewing', 'scheduledDate status durationMinutes')
-        .sort({ createdAt: -1 })
-        .limit(limit);
-
-      const unreadCount = await ActivityLog.countDocuments({
-        user: req.user._id,
-        isRead: { $ne: true }
-      });
-
-      return res.json({ activities, unreadCount });
+    if (unreadOnly) {
+      query.isRead = { $ne: true };
     }
 
-    // Mock fallback
-    res.json({
-      activities: [
-        {
-          _id: 'act-1',
-          type: 'Viewing Booked',
-          title: 'New Viewing Scheduled',
-          note: 'Sarah Jenkins booked a viewing for Modern Luxury Villa',
-          author: 'System',
-          createdAt: new Date().toISOString(),
-          isRead: false
-        }
-      ],
-      unreadCount: 1
+    const activities = await ActivityLog.find(query)
+      .populate('lead', 'name email phone stage')
+      .populate('property', 'title address price')
+      .populate('viewing', 'scheduledDate status durationMinutes')
+      .sort({ createdAt: -1 })
+      .limit(limit);
+
+    const unreadCount = await ActivityLog.countDocuments({
+      user: req.user._id,
+      isRead: { $ne: true }
     });
+
+    res.json({ activities, unreadCount });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -66,19 +46,14 @@ router.get('/', protect, async (req, res) => {
 router.put('/mark-read', protect, async (req, res) => {
   try {
     const { activityIds } = req.body;
+    const filter = { user: req.user._id };
 
-    if (isDbConnected()) {
-      const filter = { user: req.user._id };
-
-      if (Array.isArray(activityIds) && activityIds.length > 0) {
-        filter._id = { $in: activityIds };
-      }
-
-      await ActivityLog.updateMany(filter, { $set: { isRead: true } });
-      return res.json({ success: true, message: 'Activities marked as read' });
+    if (Array.isArray(activityIds) && activityIds.length > 0) {
+      filter._id = { $in: activityIds };
     }
 
-    res.json({ success: true });
+    await ActivityLog.updateMany(filter, { $set: { isRead: true } });
+    res.json({ success: true, message: 'Activities marked as read' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -95,34 +70,23 @@ router.post('/', protect, async (req, res) => {
       return res.status(400).json({ error: 'Activity note is required' });
     }
 
-    if (isDbConnected()) {
-      const activity = await ActivityLog.create({
-        user: req.user._id,
-        lead: lead || undefined,
-        property: property || undefined,
-        viewing: viewing || undefined,
-        type: type || 'General',
-        title: title || `${type || 'General'} Activity`,
-        note,
-        author: req.user.name || 'Agent',
-        isRead: false
-      });
-
-      const populated = await ActivityLog.findById(activity._id)
-        .populate('lead', 'name email phone stage')
-        .populate('property', 'title address price');
-
-      return res.status(201).json(populated);
-    }
-
-    res.status(201).json({
-      _id: `act-${Date.now()}`,
-      note,
+    const activity = await ActivityLog.create({
+      user: req.user._id,
+      lead: lead || undefined,
+      property: property || undefined,
+      viewing: viewing || undefined,
       type: type || 'General',
+      title: title || `${type || 'General'} Activity`,
+      note,
       author: req.user.name || 'Agent',
-      createdAt: new Date().toISOString(),
       isRead: false
     });
+
+    const populated = await ActivityLog.findById(activity._id)
+      .populate('lead', 'name email phone stage')
+      .populate('property', 'title address price');
+
+    res.status(201).json(populated);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

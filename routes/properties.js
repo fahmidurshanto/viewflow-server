@@ -2,47 +2,28 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 const Property = require('../models/Property');
-const store = require('../config/mockStore');
 const { optionalAuth, protect } = require('../middleware/auth');
 const { checkPropertyLimit } = require('../middleware/planAccess');
-
-const isDbConnected = () => mongoose.connection.readyState === 1;
 
 // GET all properties
 router.get('/', optionalAuth, async (req, res) => {
   try {
-    if (isDbConnected()) {
-      const { status, type, search } = req.query;
-      let query = {};
-      if (req.user) {
-        // Strict multi-tenant isolation: Only user's own properties
-        query.user = req.user._id;
-      }
-      if (status) query.status = status;
-      if (type) query.type = type;
-      if (search) {
-        query.$or = [
-          { title: { $regex: search, $options: 'i' } },
-          { 'address.city': { $regex: search, $options: 'i' } }
-        ];
-      }
-      const properties = await Property.find(query).sort({ createdAt: -1 });
-      return res.json(properties);
-    }
-
-    // In-memory fallback
-    let results = [...store.properties];
     const { status, type, search } = req.query;
-    if (status) results = results.filter((p) => p.status === status);
-    if (type) results = results.filter((p) => p.type === type);
-    if (search) {
-      results = results.filter(
-        (p) =>
-          p.title.toLowerCase().includes(search.toLowerCase()) ||
-          p.address.city.toLowerCase().includes(search.toLowerCase())
-      );
+    let query = {};
+    if (req.user) {
+      // Strict multi-tenant isolation: Only user's own properties
+      query.user = req.user._id;
     }
-    res.json(results);
+    if (status) query.status = status;
+    if (type) query.type = type;
+    if (search) {
+      query.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { 'address.city': { $regex: search, $options: 'i' } }
+      ];
+    }
+    const properties = await Property.find(query).sort({ createdAt: -1 });
+    res.json(properties);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -51,13 +32,12 @@ router.get('/', optionalAuth, async (req, res) => {
 // GET single property
 router.get('/:id', async (req, res) => {
   try {
-    if (isDbConnected() && mongoose.isValidObjectId(req.params.id)) {
-      const property = await Property.findById(req.params.id).populate('user', 'name email phone agencyName');
-      if (property) return res.json(property);
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(404).json({ error: 'Property not found' });
     }
-    const prop = store.properties.find((p) => p._id === req.params.id);
-    if (!prop) return res.status(404).json({ error: 'Property not found' });
-    res.json(prop);
+    const property = await Property.findById(req.params.id).populate('user', 'name email phone agencyName');
+    if (!property) return res.status(404).json({ error: 'Property not found' });
+    res.json(property);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -66,23 +46,13 @@ router.get('/:id', async (req, res) => {
 // CREATE property (Protected with Plan Limit Check)
 router.post('/', protect, checkPropertyLimit, async (req, res) => {
   try {
-    if (isDbConnected()) {
-      const propData = {
-        ...req.body,
-        user: req.user._id
-      };
-      const property = new Property(propData);
-      const saved = await property.save();
-      return res.status(201).json(saved);
-    }
-    const newProp = {
-      _id: `prop-${Date.now()}`,
+    const propData = {
       ...req.body,
-      user: req.user._id,
-      createdAt: new Date().toISOString()
+      user: req.user._id
     };
-    store.properties.unshift(newProp);
-    res.status(201).json(newProp);
+    const property = new Property(propData);
+    const saved = await property.save();
+    res.status(201).json(saved);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
@@ -91,23 +61,18 @@ router.post('/', protect, checkPropertyLimit, async (req, res) => {
 // UPDATE property (Protected - ownership verified)
 router.put('/:id', protect, async (req, res) => {
   try {
-    if (isDbConnected()) {
-      const updated = await Property.findOneAndUpdate(
-        { _id: req.params.id, user: req.user._id },
-        req.body,
-        { new: true }
-      );
-      if (!updated) {
-        return res.status(404).json({ error: 'Property not found or access denied' });
-      }
-      return res.json(updated);
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(404).json({ error: 'Property not found' });
     }
-    const idx = store.properties.findIndex((p) => p._id === req.params.id);
-    if (idx !== -1) {
-      store.properties[idx] = { ...store.properties[idx], ...req.body };
-      return res.json(store.properties[idx]);
+    const updated = await Property.findOneAndUpdate(
+      { _id: req.params.id, user: req.user._id },
+      req.body,
+      { new: true }
+    );
+    if (!updated) {
+      return res.status(404).json({ error: 'Property not found or access denied' });
     }
-    res.status(404).json({ error: 'Property not found' });
+    res.json(updated);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
@@ -116,14 +81,13 @@ router.put('/:id', protect, async (req, res) => {
 // DELETE property (Protected - ownership verified)
 router.delete('/:id', protect, async (req, res) => {
   try {
-    if (isDbConnected()) {
-      const deleted = await Property.findOneAndDelete({ _id: req.params.id, user: req.user._id });
-      if (!deleted) {
-        return res.status(404).json({ error: 'Property not found or access denied' });
-      }
-      return res.json({ message: 'Property deleted successfully' });
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(404).json({ error: 'Property not found' });
     }
-    store.properties = store.properties.filter((p) => p._id !== req.params.id);
+    const deleted = await Property.findOneAndDelete({ _id: req.params.id, user: req.user._id });
+    if (!deleted) {
+      return res.status(404).json({ error: 'Property not found or access denied' });
+    }
     res.json({ message: 'Property deleted successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });
