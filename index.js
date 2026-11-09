@@ -76,6 +76,10 @@ app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:3000',
   credentials: true
 }));
+
+// Stripe webhook requires raw body buffer for signature verification
+app.use('/api/payment/webhook', express.raw({ type: 'application/json' }));
+
 app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
 
@@ -99,6 +103,7 @@ app.get('/api/health', (req, res) => {
 // App Routes
 app.use('/api/upload', require('./routes/upload'));
 app.use('/api/auth', require('./routes/auth'));
+app.use('/api/payment', require('./routes/payment'));
 app.use('/api/properties', require('./routes/properties'));
 app.use('/api/leads', require('./routes/leads'));
 app.use('/api/viewings', require('./routes/viewings'));

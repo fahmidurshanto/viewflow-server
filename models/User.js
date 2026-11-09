@@ -58,6 +58,14 @@ const UserSchema = new mongoose.Schema(
     trialEndsAt: {
       type: Date,
       default: () => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 1 Month (30 Days) free trial
+    },
+    stripeCustomerId: {
+      type: String,
+      default: ''
+    },
+    stripeSubscriptionId: {
+      type: String,
+      default: ''
     }
   },
   { timestamps: true }

@@ -27,7 +27,8 @@
     "multer": "^2.4.0",
     "node-cron": "^4.6.0",
     "nodemailer": "^10.1.2",
-    "resend": "^6.34.1"
+    "resend": "^6.34.1",
+    "stripe": "^23.1.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"
